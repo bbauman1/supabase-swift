@@ -230,12 +230,14 @@ public final class FunctionsClient: Sendable {
 
 final class StreamResponseDelegate: NSObject, URLSessionDataDelegate, Sendable {
   let continuation: AsyncThrowingStream<Data, any Error>.Continuation
+  private var lastReceivedData = Data()
 
   init(continuation: AsyncThrowingStream<Data, any Error>.Continuation) {
     self.continuation = continuation
   }
 
   func urlSession(_: URLSession, dataTask _: URLSessionDataTask, didReceive data: Data) {
+    lastReceivedData = data
     continuation.yield(data)
   }
 
@@ -246,12 +248,14 @@ final class StreamResponseDelegate: NSObject, URLSessionDataDelegate, Sendable {
   func urlSession(_: URLSession, dataTask _: URLSessionDataTask, didReceive response: URLResponse, completionHandler: @escaping (URLSession.ResponseDisposition) -> Void) {
     guard let httpResponse = response as? HTTPURLResponse else {
       continuation.finish(throwing: URLError(.badServerResponse))
+      completionHandler(.allow)
       return
     }
 
     guard 200 ..< 300 ~= httpResponse.statusCode else {
-      let error = FunctionsError.httpError(code: httpResponse.statusCode, data: Data())
+      let error = FunctionsError.httpError(code: httpResponse.statusCode, data: lastReceivedData)
       continuation.finish(throwing: error)
+      completionHandler(.allow)
       return
     }
 
